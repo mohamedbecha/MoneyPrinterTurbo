@@ -22,13 +22,14 @@ cd ../kokoro-fastapi && USE_GPU=true DEVICE_TYPE=mps PYTORCH_ENABLE_MPS_FALLBACK
   uv run --no-sync uvicorn api.src.main:app --host 127.0.0.1 --port 8880
 ```
 
-Render a hand-made script:
+Render a hand-made script. Put it in `videos/<topic>/script.md`; an optional first line `# Title` becomes the subject and is not narrated. Then run:
 
 ```bash
-uv run python cli.py --video-aspect 16:9 --video-source pixabay --voice-name kokoro:af_heart \
-  --match-materials-to-script --video-concat-mode sequential --video-count 1 \
-  --video-subject "The Great Stink of 1858" --video-script "$(cat videos/great-stink/script.md)"
+uv run python tools/render.py great-stink                                # 16:9, Kokoro af_heart, Pixabay
+uv run python tools/render.py great-stink --voice-name kokoro:bf_emma    # extra flags override the defaults
 ```
+
+The output goes to `videos/<topic>/renders/<timestamp>/`: `final-1.mp4`, `audio.mp3`, `subtitle.srt`, `script.json` and `render.log`. Renders are gitignored, and scripts are committed.
 
 ## How the pipeline is structured
 
@@ -116,5 +117,5 @@ Hard caps: `video_script` has **no length cap**. `paragraph_number` is limited t
 - **Measure `h264_videotoolbox`** against `libx264` on the final composite.
 
 ## Open questions for the owner
-- **Niche:** watch the three test videos (in `storage/tasks/*/final-1.mp4`) and pick one.
+- **Niche:** watch the three test videos (`videos/*/renders/*/final-1.mp4`) and pick one.
 - **Voice:** `af_heart` (American) was used. For history or documentary, a British voice (`bf_emma`, `bm_george`) may suit better. This is worth an A/B test.

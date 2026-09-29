@@ -1,0 +1,2 @@
+# Renders are large and reproducible from script.md; keep them out of git.
+*/renders/
