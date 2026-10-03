@@ -1,3 +1,4 @@
+import mimetypes
 import os
 import pathlib
 import shutil
@@ -129,8 +130,10 @@ def _task_file_to_uri(file: str, endpoint: str, task_dir: str, request_id: str) 
         )
         return file
 
-    relative_path = os.path.relpath(resolved_path, task_dir).replace("\\", "/")
-    uri_path = f"tasks/{relative_path}"
+    relative_path = os.path.relpath(
+        resolved_path, os.path.realpath(task_dir)
+    ).replace("\\", "/")
+    uri_path = f"tasks/{quote(relative_path, safe='/')}"
     if endpoint:
         return f"{endpoint.rstrip('/')}/{uri_path}"
     return f"/{uri_path}"
@@ -338,7 +341,14 @@ def delete_video(request: Request, task_id: str = Path(..., description="Task ID
         tasks_dir = utils.task_dir()
         current_task_dir = os.path.join(tasks_dir, task_id)
         if os.path.exists(current_task_dir):
-            shutil.rmtree(current_task_dir)
+            try:
+                shutil.rmtree(current_task_dir)
+            except FileNotFoundError:
+                # Another completed-task deletion may remove this directory
+                # after our existence check. Only accept an absent root;
+                # partial deletion and other filesystem errors must keep state.
+                if os.path.lexists(current_task_dir):
+                    raise
 
         sm.state.delete_task(task_id)
         logger.success(f"video deleted: {utils.to_json(task)}")
@@ -356,10 +366,15 @@ def get_bgm_list(request: Request):
     bgm_list = []
     for file in bgm_service.list_bgm_files():
         filename = os.path.basename(file)
+        try:
+            size = os.path.getsize(file)
+        except OSError as exc:
+            logger.warning(f"skip unavailable background music: name={filename}, error={exc}")
+            continue
         bgm_list.append(
             {
                 "name": filename,
-                "size": os.path.getsize(file),
+                "size": size,
                 # 只返回文件名，避免把服务器绝对路径暴露给调用方。服务端会
                 # 在 storage/bgm 和 resource/songs 两个白名单目录中重新解析。
                 "file": filename,
@@ -549,9 +564,9 @@ async def download_video(request: Request, file_path: str):
     video_path = _resolve_path_within_directory(tasks_dir, file_path, request_id)
     file_path = pathlib.Path(video_path)
     filename = file_path.name
-    extension = file_path.suffix
+    media_type, _ = mimetypes.guess_type(filename)
     return FileResponse(
         path=video_path,
         filename=filename,
-        media_type=f"video/{extension[1:]}",
+        media_type=media_type or "application/octet-stream",
     )
